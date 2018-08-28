@@ -19,6 +19,7 @@
 #include <stdlib.h>
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -45,15 +46,29 @@ int main(int argc, char *argv[]) {
     addr.sin_port = htons(port);
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0); assert(sockfd >= 0);
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    connect(sockfd, (struct sockaddr *) &addr, sizeof (addr));
 
-    int rc = connect(sockfd, (struct sockaddr *) &addr, sizeof (addr));
+    fd_set fdset;
+    struct timeval tv;
+    FD_ZERO(&fdset);
+    FD_SET(sockfd, &fdset);
+    tv.tv_sec = 1; /* 1 second timeout */
+    tv.tv_usec = 0;
+
+    int rc = -1;
+    if (select(sockfd + 1, NULL, &fdset, NULL, &tv) == 1) {
+        socklen_t len = sizeof rc;
+        getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &rc, &len);
+    }
+
+    close(sockfd);
+
     if (rc == 0) {
         printf("ok\n");
     } else {
         printf("failed\n");
     }
-
-    close(sockfd);
 
     return rc;
 }
